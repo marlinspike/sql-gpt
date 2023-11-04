@@ -3,12 +3,17 @@ from pydantic import BaseModel, Field
 from langchain.llms import OpenAI
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts.chat import ChatPromptTemplate
-from xml.etree.ElementTree import Element, tostring, fromstring
-import xml.dom.minidom
+import json
 from dotenv import load_dotenv
 load_dotenv()
+from pydantic.json import pydantic_encoder
+import sys
+from rich import print_json
+from rich.console import Console
+from rich.syntax import Syntax
 
-# Example Pydantic model representing a person with various details
+console = Console()
+
 class Person(BaseModel):
     name: str = Field(...)
     address: str = Field(...)
@@ -17,79 +22,73 @@ class Person(BaseModel):
     vehicle: str = Field(...)
     license_plate: str = Field(...)
 
-    # Method to serialize the model to XML
-    def to_xml(self):
-        person_element = Element('Person')
-        
-        for field, value in self:
-            child = Element(field)
-            child.text = value
-            person_element.append(child)
-        
-        return xml.dom.minidom.parseString(tostring(person_element)).toprettyxml()
-
-    # Static method to deserialize XML to the model
-    @classmethod
-    def from_xml(cls, xml_data):
-        # ... XML parsing logic ...
-        # Let's say the result of XML parsing is `parsed_dict`
-        # Correct the keys to match the Pydantic model's field names
-        kwargs = {
-            'name': parsed_dict.get('Name'),
-            'address': parsed_dict.get('Address'),
-            'email': parsed_dict.get('Email'),
-            'alias': parsed_dict.get('Alias'),
-            'vehicle': parsed_dict.get('Vehicle'),
-            'license_plate': parsed_dict.get('License_Plate'),
+    class Config:
+        json_encoders = {
+            # Your custom encoders if needed, for example:
+            # datetime: lambda v: v.isoformat(),
         }
-        # Now kwargs should have the correct keys that the Person model expects
-        return cls(**kwargs)
 
+    def to_json(self):
+        # Use model_dump() to get the model's data as a dict
+        model_dict = self.model_dump(by_alias=True)
+        # Use json.dumps() to convert the dict to a JSON string
+        return json.dumps(model_dict)
+        #return self.json()
 
-# Function to communicate with the external API
-def communicate_with_legacy_api(xml_payload: str):
-    headers = {'Content-Type': 'application/xml'}  # Assuming the API expects XML
+    @classmethod
+    def from_json(cls, json_data):
+        return cls(**json.loads(json_data))
+
+def communicate_with_legacy_api(json_payload: str, show_xml=False):
+    headers = {'Content-Type': 'application/xml'}
+    xml_payload = json_to_xml_with_llm(json_payload)
+    if show_xml:
+        print("XML Response Payload:")
+        syntax = Syntax(xml_payload, "xml", theme="monokai", line_numbers=True)
+        console.print(xml_payload)  # Optionally print the XML payload
     response = requests.post('http://127.0.0.1:5001/person', data=xml_payload, headers=headers)
-    return response.content if response.ok else None
+    return xml_to_json_with_llm(response.content) if response.ok else None
 
-# Function to interact with LangChain (if necessary)
-def langchain_interaction(string_input: str):
-    # Initialize the LangChain Chat Model
-    chat = ChatOpenAI(temperature=0.4, verbose=True)  # Adjust temperature as necessary
-    
-    xml_translate_str = f"""You are a helpful XML assistant that translates Text written in conversational text to XML. You MUST ONLY return the XML with nothing else. 
-
-    >>> Here's the Text: {{input}}"""
+def json_to_xml_with_llm(json_payload: str):
+    chat = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo-0301")
+    xml_translate_str = """You are an XML and JSON conversion bot. Convert this JSON to XML. JSON: {json_input}"""
 
     xml_translate_template = ChatPromptTemplate.from_template(xml_translate_str)
-    xml_translate_messages = xml_translate_template.format_messages(input = string_input)
-    
-    # Use Langchain to send the prompt to GPT-4
-    #llm = OpenAI(temperature=0, verbose=True)
+    xml_translate_messages = xml_translate_template.format_messages(json_input=json_payload)
     response = chat(xml_translate_messages)
-    xml_response = response.content
+    return response.content
 
-    return xml_response
+def xml_to_json_with_llm(xml_content: str):
+    chat = ChatOpenAI(temperature=0.4)
+    json_translate_str = """You are a JSON assistant. Convert this XML to JSON. XML: {xml_input}"""
 
-# Main function to run the application
+    json_translate_template = ChatPromptTemplate.from_template(json_translate_str)
+    json_translate_messages = json_translate_template.format_messages(xml_input=xml_content)
+    response = chat(json_translate_messages)
+    return response.content
+
 def main():
-    # Assuming user_input is a string of details in English
-    user_input = "Name: John Doe, Address: 123 Main St, Email: johndoe@example.com, Alias: JD, Vehicle: Toyota, License Plate: XYZ 1234"
-    xml_data = langchain_interaction(user_input)
+    show_xml = '--show-xml' in sys.argv  # Check if --show-xml is in the command line arguments
+    user_input_json = {
+        "name": "John Doe",
+        "address": "123 Main St",
+        "email": "johndoe@example.com",
+        "alias": "JD",
+        "vehicle": "Toyota",
+        "license_plate": "XYZ 1234"
+    }
+    print("Input JSON:")
+    print_json(json.dumps(user_input_json))
+    print()
 
-    # Convert XML data back to a Person model
-    person = Person.from_xml(xml_data)
+    person = Person.from_json(json.dumps(user_input_json))
+    response_json = communicate_with_legacy_api(person.to_json(), show_xml=show_xml)
+    response_dict = json.loads(response_json)
 
-    # Serialize the Person model to XML to communicate with the API
-    xml_payload = person.to_xml()
-
-    # Send the XML to the legacy application's API
-    response_xml = communicate_with_legacy_api(xml_payload)
-    if response_xml:
+    if response_json:
         print("Successfully communicated with the legacy API")
-        # Optionally, convert the response XML back to a model
-        response_person = Person.from_xml(response_xml)
-        print(response_person)
+        #response_person = Person.from_json(response_json)
+        print(response_dict['Response'])
     else:
         print("Failed to communicate with the legacy API")
 
