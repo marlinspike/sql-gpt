@@ -1,0 +1,6 @@
+openai 
+tiktoken 
+langchain
+langchain-experimental
+python-dotenv
+rich
