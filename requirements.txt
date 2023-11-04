@@ -4,3 +4,6 @@ langchain
 langchain-experimental
 python-dotenv
 rich
+pydantic
+Flask
+requests
