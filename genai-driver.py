@@ -45,7 +45,7 @@ def communicate_with_legacy_api(json_payload: str, show_xml=False):
     if show_xml:
         print("XML Response Payload:")
         syntax = Syntax(xml_payload, "xml", theme="monokai", line_numbers=True)
-        console.print(xml_payload)  # Optionally print the XML payload
+        console.print(syntax)  # Optionally print the XML payload
     response = requests.post('http://127.0.0.1:5001/person', data=xml_payload, headers=headers)
     return xml_to_json_with_llm(response.content) if response.ok else None
 
