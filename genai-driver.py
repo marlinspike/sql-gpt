@@ -11,16 +11,27 @@ import sys
 from rich import print_json
 from rich.console import Console
 from rich.syntax import Syntax
+from typing import List
 
 console = Console()
+
+class Registration(BaseModel):
+    license_plate: str = Field(...)
+    registration_date: str = Field(...)
+    expiry_date: str = Field(...)
+
+class Vehicle(BaseModel):
+    make: str = Field(...)
+    model: str = Field(...)
+    year: int = Field(...)
+    registration: Registration = Field(...)
 
 class Person(BaseModel):
     name: str = Field(...)
     address: str = Field(...)
     email: str = Field(...)
     alias: str = Field(...)
-    vehicle: str = Field(...)
-    license_plate: str = Field(...)
+    vehicles: List[Vehicle] = Field(...)  # A list of Vehicle objects
 
     class Config:
         json_encoders = {
@@ -51,7 +62,7 @@ def communicate_with_legacy_api(json_payload: str, show_xml=False):
 
 def json_to_xml_with_llm(json_payload: str):
     chat = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo-0301")
-    xml_translate_str = """You are an XML and JSON conversion bot. Convert this JSON to XML. JSON: {json_input}"""
+    xml_translate_str = """You are an XML and JSON conversion bot. Convert this JSON to XML. Add some data (xml nodes) in there that looks like something a mainframe app would need. JSON: {json_input}"""
 
     xml_translate_template = ChatPromptTemplate.from_template(xml_translate_str)
     xml_translate_messages = xml_translate_template.format_messages(json_input=json_payload)
@@ -74,9 +85,21 @@ def main():
         "address": "123 Main St",
         "email": "johndoe@example.com",
         "alias": "JD",
-        "vehicle": "Toyota",
-        "license_plate": "XYZ 1234"
+        "vehicles": [
+            {
+                "make": "Toyota",
+                "model": "Camry",
+                "year": 2020,
+                "registration": {
+                    "license_plate": "XYZ 1234",
+                    "registration_date": "2020-01-01",
+                    "expiry_date": "2025-01-01"
+                }
+            },
+            # You can add more vehicles here
+        ]
     }
+
     print("Input JSON:")
     print_json(json.dumps(user_input_json))
     print()
