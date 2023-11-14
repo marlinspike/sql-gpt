@@ -11,7 +11,7 @@ import sys
 from rich import print_json
 from rich.console import Console
 from rich.syntax import Syntax
-from typing import List
+from typing import List, Optional
 
 console = Console()
 
@@ -50,7 +50,38 @@ class Person(BaseModel):
     def from_json(cls, json_data):
         return cls(**json.loads(json_data))
 
-def communicate_with_legacy_api(json_payload: str, show_xml=False):
+def parse_natural_language_to_json(natural_language_str: str) -> Optional[str]:
+    chat = ChatOpenAI(temperature=0.7, model_name="gpt-3.5-turbo-0301")
+    json_translate_str = """You are a JSON assistant. Convert this natural language description to JSON. 
+    Here are the classes you should use. Ensure that the JSON you generate follows the schema of these classes:
+    --
+    class Registration(BaseModel):
+    license_plate: str = Field(...)
+    registration_date: str = Field(...)
+    expiry_date: str = Field(...)
+
+class Vehicle(BaseModel):
+    make: str = Field(...)
+    model: str = Field(...)
+    year: int = Field(...)
+    registration: Registration = Field(...)
+
+class Person(BaseModel):
+    name: str = Field(...)
+    address: str = Field(...)
+    email: str = Field(...)
+    alias: str = Field(...)
+    vehicles: List[Vehicle] = Field(...)  # A list of Vehicle objects
+    --
+
+    Description: {nl_input}"""
+
+    json_translate_template = ChatPromptTemplate.from_template(json_translate_str)
+    json_translate_messages = json_translate_template.format_messages(nl_input=natural_language_str)
+    response = chat(json_translate_messages)
+    return response.content
+
+def communicate_with_legacy_api(json_payload: str, show_xml=True):
     headers = {'Content-Type': 'application/xml'}
     xml_payload = json_to_xml_with_llm(json_payload)
     if show_xml:
@@ -79,7 +110,24 @@ def xml_to_json_with_llm(xml_content: str):
     return response.content
 
 def main():
+    person = None
     show_xml = '--show-xml' in sys.argv  # Check if --show-xml is in the command line arguments
+    
+    natural_language_input = "\nJohn Doe lives at 123 Main St, his email is johndoe@example.com, his alias is JD. He has a 2020 Toyota Camry with license plate XYZ 1234, registered on 2020-01-01 and expiry on 2025-01-01."
+    print(f"Natural Language Input: {natural_language_input}\n")
+    user_input_json_str = parse_natural_language_to_json(natural_language_input)
+    if user_input_json_str:
+        try:
+            person = Person.from_json(user_input_json_str)
+        except ValueError as e:
+            print(f"Error parsing JSON: {e}")
+            return
+    print("Converted JSON from Natural Language Input:")
+    print_json(f"{user_input_json_str}\n")
+    
+
+    #Not used, since we're parsing natural language input to get this JSON
+    """
     user_input_json = {
         "name": "John Doe",
         "address": "123 Main St",
@@ -99,13 +147,10 @@ def main():
             # You can add more vehicles here
         ]
     }
+    """
 
-    print("Input JSON:")
-    print_json(json.dumps(user_input_json))
-    print()
-
-    person = Person.from_json(json.dumps(user_input_json))
-    response_json = communicate_with_legacy_api(person.to_json(), show_xml=show_xml)
+    #person = Person.from_json(json.dumps(user_input_json))
+    response_json = communicate_with_legacy_api(person.to_json(), True)
     response_dict = json.loads(response_json)
 
     if response_json:
