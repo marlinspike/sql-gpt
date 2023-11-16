@@ -52,7 +52,7 @@ def execute_sql(sql_query):
 def main():
     while True:
         # Take user input
-        user_input = input("\nEnter your English query (or type 'exit' to quit): ")
+        user_input = input("\nEnter your query (or type 'exit' to quit): ")
         if user_input.lower() == 'exit':
             break
         
