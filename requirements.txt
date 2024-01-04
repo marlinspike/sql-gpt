@@ -7,3 +7,4 @@ rich
 pydantic
 Flask
 requests
+google-generativeai

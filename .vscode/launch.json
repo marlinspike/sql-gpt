@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "args": ["--show-xml"],
+            "args": ["gemini"],
             "console": "integratedTerminal",
             "justMyCode": true
         }
